@@ -1,11 +1,32 @@
 const Order = require("../model/Order");
 const ApiError = require("../model/ApiError");
+const mongoose = require("mongoose");
+const ProductDao = require("../data/ProductDao");
+const User_Dao = require("../data/UserDao");
+const product_dao = new ProductDao();
+const users = new User_Dao();
+
 // TODO: Implement the operations of OrderDao.
 //  Do not change the signature of any of the operations!
 //  You may add helper functions, other variables, etc, as the need arises!
 
 class OrderDao {
   // When an order is created, it is in "active" state
+  async calculate_total(products) {
+    let total = 0;
+    for (const product of products) {
+      if (isNaN(product.quantity) || product.quantity <= 0) {
+        throw new ApiError(400, "Porduct has invalid quantityy");
+      }
+      if (!mongoose.isValidObjectId(product.product)) {
+        throw new ApiError(400, "Prduct has invalid id");
+      }
+      let product_value = await product_dao.read(product.product);
+      total = product.quantity * product_value.price;
+    }
+    return total;
+  }
+
   async create({ customer, products }) {
     // Hint: Total price is computer from the list of products.
 
@@ -13,7 +34,7 @@ class OrderDao {
     if (customer === undefined || customer === "") {
       throw new ApiError(400, "Every product must have a none-empty name!");
     }
-
+    await users.read(customer);
     if (products === undefined || products === null) {
       throw new ApiError(400, "Every order must have a product!");
     }
@@ -24,14 +45,22 @@ class OrderDao {
       }
     });
 
-    let total = products.length;
+    let total = await this.calculate_total(products);
     const order = await Order.create({ total, customer, products });
+    let new_products = [];
+    for (const product of order.products) {
+      new_products.push({
+        _id: product._id.toString(),
+        product: product.product.toString(),
+        quantity: product.quantity,
+      });
+    }
     return {
       _id: order._id.toString(),
       status: order.status,
-      customer: order.customer,
+      customer: order.customer.toString(),
       total: order.total,
-      products: order.products,
+      products: new_products,
     };
   }
 
@@ -41,6 +70,9 @@ class OrderDao {
     //  Otherwise, only return it if the customer is the one who placed the order!
 
     // TODO Implement me!
+    if (!mongoose.isValidObjectId(id)) {
+      throw new ApiError(404, "invalid id");
+    }
     let order;
     if (role !== "ADMIN") {
       order = await Order.find({ _id: id, customer, customer });

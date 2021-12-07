@@ -52,11 +52,18 @@ router.post("/api/users", checkAdmin, async (req, res, next) => {
   }
 });
 
-router.delete("/api/users/:id", checkAdmin, async (req, res, next) => {
+router.delete("/api/users/:id", checkToken, async (req, res, next) => {
   try {
     const { id } = req.params;
-    const data = await users.delete(id);
-    res.json({ data });
+    if (
+      (req.user.sub === id && req.user.role === "CUSTOMER") ||
+      req.user.role === "ADMIN"
+    ) {
+      const data = await users.delete(id);
+      res.json({ data });
+    } else {
+      throw new ApiError(403, "You are not authorized to access this resource");
+    }
   } catch (err) {
     next(err);
   }
@@ -70,6 +77,12 @@ router.put("/api/users/:id", checkToken, async (req, res, next) => {
       throw new ApiError(400, "You must provide at least one user attribute!");
     }
     if (req.user.role !== "ADMIN") {
+      if (role) {
+        throw new ApiError(
+          403,
+          "You are not authorized to access this resource"
+        );
+      }
       const data = await users.update(id, { password });
       res.json({ data });
     } else {
